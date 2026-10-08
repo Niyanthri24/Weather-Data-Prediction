@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Collection Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --border: rgba(11,11,11,.10);
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+    --critical: #d03b3b; --warning: #fab219;
+    --div-cold: #256abf; --div-mid: #f0efec; --div-hot: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --border: rgba(255,255,255,.10);
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --div-cold: #3987e5; --div-mid: #383835; --div-hot: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { font-size: 24px; line-height: 1.2; margin: 0 0 4px; font-weight: 650; }
+  h2 { font-size: 15px; margin: 0; font-weight: 600; }
+  .sub { color: var(--ink-2); margin: 0; }
+  .note { color: var(--ink-2); font-size: 13px; margin: 2px 0 0; }
+
+  .banner {
+    display: flex; gap: 8px; align-items: baseline; margin-top: 16px; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--ink-2);
+  }
+  .banner::before { content: "!"; flex: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--warning); color: #0b0b0b; font-weight: 700; font-size: 12px;
+    display: inline-grid; place-items: center; transform: translateY(2px); }
+  [hidden] { display: none !important; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 20px 0 12px; }
+  .filters button {
+    font: inherit; color: var(--ink-2); background: transparent; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px;
+  }
+  .filters button:hover { background: var(--surface); }
+  .filters button[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+  button:focus-visible, svg:focus-visible, .rng-row:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .tile .label { color: var(--ink-2); font-size: 13px; }
+  .tile .value { font-size: 28px; line-height: 1.2; font-weight: 600; margin-top: 2px; }
+  .tile .detail { color: var(--ink-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  main section.card { margin-top: 12px; }
+  .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-bottom: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); font-size: 13px; margin: 0 0 6px; padding: 0; list-style: none; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; border-radius: 2px; flex: none; }
+  .key.limit { border-top: 1px dashed var(--muted); border-radius: 0; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  #trend { position: relative; }
+  #trend svg { display: block; width: 100%; touch-action: pan-y; outline-offset: 4px; }
+  svg text { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  svg text.end-label { fill: var(--ink-2); }
+
+  .rng-row { display: grid; grid-template-columns: minmax(64px, 120px) 1fr 62px; gap: 12px; align-items: center; height: 34px; border-radius: 4px; }
+  .rng-row:hover { background: color-mix(in srgb, var(--grid) 45%, transparent); }
+  .rng-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+  .rng-val { text-align: right; font-variant-numeric: tabular-nums; }
+  .rng-track { position: relative; height: 100%; }
+  .rng-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+  .rng-limit { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--muted); }
+  .rng-span { position: absolute; top: 50%; height: 6px; margin-top: -3px; border-radius: 3px; opacity: .35; }
+  .rng-dot { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid var(--surface); }
+  .rng-axis { height: 22px; }
+  .rng-axis:hover { background: none; }
+  .rng-tick { position: absolute; top: 4px; transform: translateX(-50%); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+  th, td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--grid); }
+  th { color: var(--ink-2); font-weight: 500; font-size: 13px; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td .dot { margin-right: 8px; }
+  .flag { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 12px; color: var(--ink-2); }
+  .flag::before { content: "▲"; color: var(--critical); font-size: 10px; }
+  .flag.storm::before { content: "◆"; color: var(--warning); }
+  td .flag:first-of-type { margin-left: 8px; }
+
+  .heat { display: grid; grid-template-columns: minmax(64px, 120px) repeat(24, minmax(0, 1fr)); gap: 2px; align-items: center; }
+  .heat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); padding-right: 10px; }
+  .heat-cell { height: 26px; border-radius: 2px; }
+  .heat-cell.none { background: transparent; box-shadow: inset 0 0 0 1px var(--grid); }
+  .heat-cell:hover { outline: 2px solid var(--ink); outline-offset: -1px; }
+  .heat-hour { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
+  .scale { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; margin-top: 12px; flex-wrap: wrap; }
+  .scale-bar { width: 180px; height: 10px; border-radius: 2px; }
+  details { margin-top: 10px; color: var(--ink-2); font-size: 13px; }
+  details summary { cursor: pointer; }
+  details .table-wrap { margin-top: 8px; }
+
+  .alerts { list-style: none; margin: 0; padding: 0; }
+  .alerts li { display: grid; grid-template-columns: 120px minmax(80px, 140px) 80px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--grid); align-items: baseline; }
+  .alerts li:last-child { border-bottom: 0; }
+  .alerts .when { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .alerts .what { color: var(--ink-2); }
+  .alerts .flag { margin-left: 0; }
+
+  #tip {
+    position: fixed; z-index: 10; pointer-events: none; min-width: 150px; max-width: 260px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.14); font-size: 13px;
+  }
+  #tip .tip-title { color: var(--ink-2); margin-bottom: 4px; }
+  #tip .tip-row { display: flex; align-items: center; gap: 8px; }
+  #tip .tip-row b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  #tip .tip-row span.name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .empty { color: var(--ink-2); padding: 28px 0; text-align: center; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 20px; }
+  footer a { color: var(--ink-2); }
+
+  @media (max-width: 720px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tile .value { font-size: 24px; }
+    .heat { grid-template-columns: 76px repeat(24, minmax(0, 1fr)); gap: 1px; }
+    .heat-hour.minor { visibility: hidden; }
+    .alerts li { grid-template-columns: auto 1fr; gap: 2px 12px; }
+    .alerts li > :nth-child(2) { text-align: right; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Weather Collection Dashboard</h1>
+  <p class="sub" id="updated">Loading readings…</p>
+  <div class="banner" id="banner" hidden></div>
+
+  <div id="content" hidden>
+    <div class="filters" id="filters" role="group" aria-label="Time range"></div>
+
+    <section class="tiles" id="tiles"></section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Temperature over time</h2>
+          <p class="note" id="trend-note"></p>
+        </div>
+      </div>
+      <ul class="legend" id="legend"></ul>
+      <div id="trend"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Recent alerts</h2>
+          <p class="note">Worked out from the stored readings with the same rules the workflow uses to send Slack alerts.</p>
+        </div>
+      </div>
+      <div id="alerts"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Temperature heatmap by hour of day</h2>
+          <p class="note">Average temperature for each hour of the day, in your local time. Red is hotter than the alert limit, blue is cooler.</p>
+        </div>
+      </div>
+      <div id="heatmap"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Temperature range by city</h2>
+          <p class="note">The dot is the average; the bar runs from the lowest to the highest reading.</p>
+        </div>
+      </div>
+      <div id="ranges"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Latest reading per city</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>City</th><th class="num">Latest</th><th>Conditions</th>
+            <th class="num">Wind</th><th class="num">Average</th><th class="num">Low</th><th class="num">High</th>
+            <th class="num">Readings</th><th>Last reading</th>
+          </tr></thead>
+          <tbody id="table"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Times are shown in your local time zone. The page checks for new readings every 5 minutes.
+      <a id="raw-link" href="data/weather_data.csv">View the raw data</a>
+    </footer>
+  </div>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+// Keep these the same as the workflow's settings, so the page matches the alerts it sends.
+const ALERT_LIMIT_C = 30;     // TEMP_LIMIT_C in .github/workflows/weather.yml
+const WIND_LIMIT_MS = 17.2;   // WIND_LIMIT_MS (default in weather_alerts.py)
+// OpenWeatherMap condition codes that count as a storm; same list as STORM_CODES in weather_alerts.py.
+const isStormCode = (id) => (id >= 200 && id < 300) || [502, 503, 504, 511, 522, 602, 622, 771, 781].includes(id);
+const isStorm = (r) => isStormCode(r.cond) || (r.wind != null && r.wind >= WIND_LIMIT_MS);
+
+const STALE_AFTER_MS = 90 * 60 * 1000;   // warn when the newest reading is older than this
+const REFRESH_MS = 5 * 60 * 1000;
+const MAX_SERIES = 8;                    // the chart draws at most 8 city lines
+const HOUR = 36e5, DAY = 864e5;
+const RANGES = [
+  { id: "24h", label: "24 hours", ms: DAY, text: "in the last 24 hours" },
+  { id: "7d", label: "7 days", ms: 7 * DAY, text: "in the last 7 days" },
+  { id: "30d", label: "30 days", ms: 30 * DAY, text: "in the last 30 days" },
+  { id: "all", label: "All", ms: Infinity, text: "in total" },
+];
+
+let readings = [];        // every valid row from the CSV
+let cityOrder = [];       // cities in order of first appearance; fixes each city's colour
+let range = "7d";
+let rangeChosen = false;  // has the viewer picked a range themselves?
+let lastTrendWidth = 0;
+
+const $ = (sel) => document.querySelector(sel);
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key === "style") node.style.cssText = value;
+    else node.setAttribute(key, value);
+  }
+  node.append(...children);
+  return node;
+}
+function svg(tag, attrs = {}, text) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+/* ---------- formatting ---------- */
+const fmtTemp = (c) => `${c.toFixed(1)}°C`;
+const fmtDay = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
+const fmtDayYear = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
+const fmtClock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const fmtStamp = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function fmtAgo(ms) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return `${Math.round(minutes / 1440)} days ago`;
+}
+const colorOf = (city) => {
+  const i = cityOrder.indexOf(city);
+  return i >= 0 && i < MAX_SERIES ? `var(--s${i + 1})` : "var(--muted)";
+};
+
+/* ---------- loading ---------- */
+// On GitHub Pages, read the CSV straight from the repo so the page always has the
+// newest commit. Anywhere else (or if that fails), use the copy next to this page.
+function dataSources(loc) {
+  const sources = [];
+  const owner = /^([^.]+)\.github\.io$/i.exec(loc.hostname);
+  const repo = loc.pathname.split("/").filter(Boolean)[0];
+  if (owner && repo && !repo.includes(".")) {
+    sources.push(`https://raw.githubusercontent.com/${owner[1]}/${repo}/HEAD/data/weather_data.csv`);
+  }
+  sources.push("data/weather_data.csv");
+  return sources;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") { row.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      if (row.length > 1 || row[0] !== "") rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function toReadings(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) return [];
+  const header = rows[0].map((name) => name.trim().toLowerCase());
+  const col = (name) => header.indexOf(name);
+  const [iCity, iTemp, iDesc, iTime] = [col("city"), col("temperature"), col("description"), col("timestamp")];
+  const [iCond, iWind] = [col("condition_id"), col("wind_speed")];   // added later; older rows leave them blank
+  if (iCity < 0 || iTemp < 0 || iTime < 0) return [];
+  const out = [];
+  for (const row of rows.slice(1)) {
+    const kelvin = parseFloat(row[iTemp]);
+    const t = Date.parse(row[iTime]);
+    const city = (row[iCity] || "").trim();
+    if (!city || !Number.isFinite(kelvin) || !Number.isFinite(t)) continue;  // skip damaged rows
+    const cond = iCond >= 0 ? parseInt(row[iCond], 10) : NaN;
+    const wind = iWind >= 0 ? parseFloat(row[iWind]) : NaN;
+    out.push({ city, c: kelvin - 273.15, desc: (iDesc >= 0 && row[iDesc]) || "", t,
+      cond: Number.isFinite(cond) ? cond : null, wind: Number.isFinite(wind) ? wind : null });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
+async function load() {
+  let text = null;
+  for (const url of dataSources(location)) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (response.ok) { text = await response.text(); break; }
+    } catch (error) { /* try the next source */ }
+  }
+  if (text === null) {
+    if (!readings.length) showBanner("No readings yet. This page fills in after the Weather alerts workflow has run once and saved data/weather_data.csv.");
+    $("#updated").textContent = readings.length ? $("#updated").textContent : "Waiting for the first readings";
+    return;
+  }
+  readings = toReadings(text);
+  for (const r of readings) if (!cityOrder.includes(r.city)) cityOrder.push(r.city);
+  if (!readings.length) {
+    showBanner("The data file is there but has no readings yet.");
+    $("#updated").textContent = "Waiting for the first readings";
+    return;
+  }
+  // If nothing falls in the default range, show everything rather than an empty page.
+  if (!rangeChosen && !inRange(readings, range).length) range = "all";
+  render();
+}
+
+function showBanner(message) {
+  const banner = $("#banner");
+  banner.textContent = message;
+  banner.hidden = !message;
+}
+
+/* ---------- data shaping ---------- */
+function inRange(rows, id) {
+  const span = RANGES.find((r) => r.id === id).ms;
+  const now = Date.now();
+  return rows.filter((r) => now - r.t <= span);
+}
+
+function statsByCity(rows) {
+  const byCity = new Map();
+  for (const r of rows) {
+    let s = byCity.get(r.city);
+    if (!s) byCity.set(r.city, (s = { city: r.city, n: 0, sum: 0, min: Infinity, max: -Infinity, last: r, pts: [] }));
+    s.n++; s.sum += r.c;
+    s.min = Math.min(s.min, r.c); s.max = Math.max(s.max, r.c);
+    if (r.t >= s.last.t) s.last = r;
+    s.pts.push(r);
+  }
+  for (const s of byCity.values()) s.avg = s.sum / s.n;
+  return [...byCity.values()];
+}
+
+// Replay the workflow's alert rules over the stored readings: an alert fires when a city
+// crosses into heat or storm conditions (or its first reading already is extreme).
+function alertEvents(all) {
+  const previous = new Map();
+  const events = [];
+  for (const r of all) {
+    const before = previous.get(r.city);
+    if (r.c > ALERT_LIMIT_C && (!before || before.c <= ALERT_LIMIT_C)) {
+      events.push({ t: r.t, city: r.city, kind: "heat", detail: `${fmtTemp(r.c)}, ${r.desc}` });
+    }
+    if (isStorm(r) && (!before || !isStorm(before))) {
+      const wind = r.wind != null ? `, wind ${r.wind.toFixed(1)} m/s` : "";
+      events.push({ t: r.t, city: r.city, kind: "storm", detail: `${r.desc}${wind}` });
+    }
+    previous.set(r.city, r);
+  }
+  return events;
+}
+
+// Round temperature ticks that cover lo..hi, pulling in the alert limit when it is close by.
+function tempTicks(lo, hi) {
+  const reach = Math.max(5, hi - lo);
+  const showLimit = ALERT_LIMIT_C >= lo - reach && ALERT_LIMIT_C <= hi + reach;
+  if (showLimit) { lo = Math.min(lo, ALERT_LIMIT_C); hi = Math.max(hi, ALERT_LIMIT_C); }
+  if (hi - lo < 2) { lo -= 1; hi += 1; }
+  const rough = (hi - lo) / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= rough);
+  const ticks = [];
+  for (let v = Math.floor(lo / step) * step; v <= Math.ceil(hi / step) * step + step / 2; v += step) ticks.push(+v.toFixed(6));
+  return { ticks, showLimit };
+}
+
+function timeTicks(t0, t1, maxTicks) {
+  const steps = [HOUR, 2 * HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 90 * DAY, 365 * DAY];
+  const step = steps.find((s) => (t1 - t0) / s <= maxTicks) || steps[steps.length - 1];
+  const cursor = new Date(t0);
+  cursor.setMinutes(0, 0, 0);
+  if (step >= DAY) cursor.setHours(0);
+  else cursor.setHours(Math.floor(cursor.getHours() / (step / HOUR)) * (step / HOUR));
+  const ticks = [];
+  while (cursor.getTime() <= t1 && ticks.length < 50) {
+    if (cursor.getTime() >= t0) ticks.push(cursor.getTime());
+    if (step >= DAY) cursor.setDate(cursor.getDate() + step / DAY);   // calendar days, so clock changes don't drift
+    else cursor.setHours(cursor.getHours() + step / HOUR);
+  }
+  return { ticks, step };
+}
+
+/* ---------- tooltip ---------- */
+function showTip(x, y, title, rows) {
+  const tip = $("#tip");
+  tip.replaceChildren(el("div", { class: "tip-title", text: title }));
+  for (const row of rows) {
+    tip.append(el("div", { class: "tip-row" },
+      el("span", { class: "key", style: `border-color:${row.color}` }),
+      el("b", { text: row.value }),
+      el("span", { class: "name", text: row.label })));
+  }
+  tip.hidden = false;
+  const box = tip.getBoundingClientRect();
+  let left = x + 14;
+  if (left + box.width > innerWidth - 8) left = x - box.width - 14;
+  tip.style.left = `${Math.max(8, left)}px`;
+  tip.style.top = `${Math.max(8, Math.min(innerHeight - box.height - 8, y - box.height / 2))}px`;
+}
+const hideTip = () => { $("#tip").hidden = true; };
+
+/* ---------- rendering ---------- */
+function render() {
+  const rows = inRange(readings, range);
+  const stats = statsByCity(rows);
+  const newest = readings[readings.length - 1];
+  const age = Date.now() - newest.t;
+
+  $("#content").hidden = false;
+  $("#updated").textContent = `Last reading ${fmtStamp.format(newest.t)} (${fmtAgo(age)})`;
+  showBanner(age > STALE_AFTER_MS
+    ? `No new readings for ${fmtAgo(age).replace(" ago", "")}. Check the Actions tab in the repo to see whether the workflow is still running.`
+    : "");
+
+  const span = RANGES.find((r) => r.id === range).ms;
+  const events = alertEvents(readings).filter((e) => Date.now() - e.t <= span);
+
+  drawFilters();
+  drawTiles(rows, stats, events);
+  drawTrend(stats);
+  drawAlerts(events);
+  drawHeatmap(rows, stats);
+  drawRanges(stats);
+  drawTable(stats);
+}
+
+function drawFilters() {
+  const host = $("#filters");
+  host.replaceChildren(...RANGES.map((r) => {
+    const button = el("button", { type: "button", "aria-pressed": String(r.id === range), text: r.label });
+    button.addEventListener("click", () => { range = r.id; rangeChosen = true; render(); });
+    return button;
+  }));
+}
+
+function drawTiles(rows, stats, events) {
+  const tile = (label, value, detail) => el("div", { class: "card tile" },
+    el("div", { class: "label", text: label }),
+    el("div", { class: "value", text: value }),
+    el("div", { class: "detail", text: detail, title: detail }));
+  const hottest = stats.reduce((a, b) => (b.last.c > a.last.c ? b : a), stats[0]);
+  const coldest = stats.reduce((a, b) => (b.last.c < a.last.c ? b : a), stats[0]);
+  const heat = events.filter((e) => e.kind === "heat").length;
+  const storm = events.length - heat;
+  const cities = stats.length === 1 ? "1 city" : `${stats.length} cities`;
+  $("#tiles").replaceChildren(
+    tile("Readings", rows.length.toLocaleString(), `from ${cities}`),
+    tile("Hottest now", hottest ? fmtTemp(hottest.last.c) : "–", hottest ? hottest.city : "No readings in this range"),
+    tile("Coldest now", coldest ? fmtTemp(coldest.last.c) : "–", coldest ? coldest.city : "No readings in this range"),
+    tile("Alerts", String(events.length), events.length ? `${heat} heat, ${storm} storm` : "None in this range"));
+}
+
+function drawTrend(stats) {
+  const host = $("#trend");
+  const legend = $("#legend");
+  const note = $("#trend-note");
+  hideTip();
+  host.replaceChildren();
+  legend.replaceChildren();
+  note.textContent = "";
+
+  const series = stats
+    .filter((s) => cityOrder.indexOf(s.city) < MAX_SERIES)
+    .sort((a, b) => cityOrder.indexOf(a.city) - cityOrder.indexOf(b.city));
+  if (!series.length) {
+    host.append(el("div", { class: "empty", text: "No readings in this range. Try a longer one." }));
+    return;
+  }
+  if (stats.length > series.length) note.textContent = `Showing the first ${MAX_SERIES} cities. All cities are in the table below.`;
+
+  // City names only need a legend when there are two or more lines.
+  if (series.length > 1) {
+    legend.append(...series.map((s) => el("li", {},
+      el("span", { class: "key", style: `border-color:${colorOf(s.city)}` }),
+      el("span", { text: s.city }))));
+  } else {
+    note.textContent = series[0].city;
+  }
+
+  const width = host.clientWidth;
+  lastTrendWidth = width;
+  const height = width < 520 ? 240 : 320;
+  let t0 = Math.min(...series.map((s) => s.pts[0].t));
+  let t1 = Math.max(...series.map((s) => s.pts[s.pts.length - 1].t));
+  if (t1 - t0 < HOUR) { const mid = (t0 + t1) / 2; t0 = mid - HOUR / 2; t1 = mid + HOUR / 2; }
+  const { ticks: yTicks, showLimit } = tempTicks(Math.min(...series.map((s) => s.min)), Math.max(...series.map((s) => s.max)));
+  const y0 = yTicks[0], y1 = yTicks[yTicks.length - 1];
+
+  const margin = { top: 14, right: 14, bottom: 30, left: 40 };
+  const plotH = height - margin.top - margin.bottom;
+  const Y = (c) => margin.top + plotH * (1 - (c - y0) / (y1 - y0));
+
+  // Name each line at its right end, but only when the names won't sit on top of each other.
+  const endYs = series.map((s) => Y(s.pts[s.pts.length - 1].c)).sort((a, b) => a - b);
+  const endsClear = endYs.every((y, i) => i === 0 || y - endYs[i - 1] >= 15);
+  const endLabels = series.length > 1 && series.length <= 4 && width >= 560 && endsClear;
+  if (endLabels) margin.right = Math.min(130, 16 + Math.max(...series.map((s) => s.city.length)) * 6.8);
+
+  const plotW = width - margin.left - margin.right;
+  const X = (t) => margin.left + plotW * (t - t0) / (t1 - t0);
+
+  const root = svg("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "img", tabindex: "0",
+    "aria-label": `Line chart of temperature over time for ${series.map((s) => s.city).join(", ")}. Use the left and right arrow keys to read values. The same figures are in the table below.` });
+
+  // Grid and axes: quiet, solid hairlines.
+  for (const tick of yTicks) {
+    root.append(svg("line", { x1: margin.left, x2: margin.left + plotW, y1: Y(tick), y2: Y(tick), stroke: tick === y0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }));
+    root.append(svg("text", { x: margin.left - 8, y: Y(tick) + 4, "text-anchor": "end" }, `${tick}°`));
+  }
+  const { ticks: xTicks, step } = timeTicks(t0, t1, Math.max(4, Math.floor(plotW / 80)));
+  for (const tick of xTicks) {
+    const date = new Date(tick);
+    const atMidnight = date.getHours() === 0 && date.getMinutes() === 0;
+    const label = step >= 365 * DAY ? fmtDayYear.format(date) : step >= DAY || atMidnight ? fmtDay.format(date) : fmtClock.format(date);
+    const x = X(tick);
+    const anchor = x < margin.left + 24 ? "start" : x > margin.left + plotW - 24 ? "end" : "middle";
+    root.append(svg("line", { x1: x, x2: x, y1: margin.top + plotH, y2: margin.top + plotH + 4, stroke: "var(--axis)", "stroke-width": 1 }));
+    root.append(svg("text", { x, y: height - 8, "text-anchor": anchor }, label));
+  }
+  const spanText = fmtDay.format(t0) === fmtDay.format(t1) ? fmtDay.format(t0) : `${fmtDay.format(t0)} to ${fmtDay.format(t1)}`;
+  note.textContent = [note.textContent, spanText].filter(Boolean).join(" · ");
+
+  // The alert limit: the one dashed line, because it is a threshold and not data.
+  if (showLimit) {
+    root.append(svg("line", { x1: margin.left, x2: margin.left + plotW, y1: Y(ALERT_LIMIT_C), y2: Y(ALERT_LIMIT_C), stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "4 4" }));
+    legend.append(el("li", {}, el("span", { class: "key limit" }), el("span", { text: `Alert limit ${ALERT_LIMIT_C}°C` })));
+  }
+
+  for (const s of series) {
+    const color = colorOf(s.city);
+    const path = s.pts.map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.c).toFixed(1)}`).join("");
+    root.append(svg("path", { d: path, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const dots = s.pts.length <= 12 ? s.pts : [s.pts[s.pts.length - 1]];
+    for (const p of dots) root.append(svg("circle", { cx: X(p.t), cy: Y(p.c), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2 }));
+    if (endLabels) {
+      const last = s.pts[s.pts.length - 1];
+      root.append(svg("text", { class: "end-label", x: X(last.t) + 10, y: Y(last.c) + 4 }, s.city));
+    }
+  }
+
+  // Hover layer: a crosshair that snaps to the nearest reading time and lists every city.
+  // One stop per collection run: readings taken within 5 minutes of each other share a stop.
+  const times = [];
+  for (const t of series.flatMap((s) => s.pts.map((p) => p.t)).sort((a, b) => a - b)) {
+    if (!times.length || t - times[times.length - 1] > 5 * 60 * 1000) times.push(t);
+  }
+  const crosshair = svg("line", { y1: margin.top, y2: margin.top + plotH, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" });
+  const hoverDots = svg("g");
+  root.append(crosshair, hoverDots);
+  let active = -1;
+
+  const nearestIndex = (list, t, key = (v) => v) => {
+    let lo = 0, hi = list.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (key(list[mid]) < t) lo = mid; else hi = mid; }
+    return Math.abs(key(list[lo]) - t) <= Math.abs(key(list[hi]) - t) ? lo : hi;
+  };
+  const showAt = (index) => {
+    active = Math.max(0, Math.min(times.length - 1, index));
+    const t = times[active];
+    const rows = [];
+    hoverDots.replaceChildren();
+    for (const s of series) {
+      const p = s.pts[nearestIndex(s.pts, t, (q) => q.t)];
+      if (Math.abs(p.t - t) > 10 * 60 * 1000) continue;   // this city has no reading from that run
+      hoverDots.append(svg("circle", { cx: X(p.t), cy: Y(p.c), r: 5, fill: colorOf(s.city), stroke: "var(--surface)", "stroke-width": 2 }));
+      rows.push({ color: colorOf(s.city), value: fmtTemp(p.c), label: s.city, c: p.c });
+    }
+    rows.sort((a, b) => b.c - a.c);
+    crosshair.setAttribute("x1", X(t)); crosshair.setAttribute("x2", X(t));
+    crosshair.setAttribute("visibility", "visible");
+    const box = root.getBoundingClientRect();
+    showTip(box.left + X(t), box.top + margin.top + plotH / 2, fmtStamp.format(t), rows);
+  };
+  const clear = () => { active = -1; crosshair.setAttribute("visibility", "hidden"); hoverDots.replaceChildren(); hideTip(); };
+  const onPointer = (event) => {
+    const box = root.getBoundingClientRect();
+    const t = t0 + (event.clientX - box.left - margin.left) / plotW * (t1 - t0);
+    showAt(nearestIndex(times, t));
+  };
+  root.addEventListener("pointermove", onPointer);
+  root.addEventListener("pointerdown", onPointer);
+  root.addEventListener("pointerleave", clear);
+  root.addEventListener("focus", () => { if (active < 0) showAt(times.length - 1); });
+  root.addEventListener("blur", clear);
+  root.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") { showAt((active < 0 ? times.length : active) - 1); event.preventDefault(); }
+    else if (event.key === "ArrowRight") { showAt(active + 1); event.preventDefault(); }
+    else if (event.key === "Escape") clear();
+  });
+
+  host.append(root);
+}
+
+function drawAlerts(events) {
+  const host = $("#alerts");
+  host.replaceChildren();
+  if (!events.length) {
+    host.append(el("div", { class: "empty", text: "No alerts in this range." }));
+    return;
+  }
+  const shown = [...events].sort((a, b) => b.t - a.t).slice(0, 12);
+  host.append(el("ul", { class: "alerts" }, ...shown.map((e) => el("li", {},
+    el("span", { class: "when", text: fmtStamp.format(e.t) }),
+    el("span", {}, el("span", { class: "dot", style: `background:${colorOf(e.city)};margin-right:8px` }), el("span", { text: e.city })),
+    el("span", { class: e.kind === "heat" ? "flag" : "flag storm", text: e.kind === "heat" ? "Heat" : "Storm" }),
+    el("span", { class: "what", text: e.detail })))));
+  if (events.length > shown.length) host.append(el("p", { class: "note", text: `Showing the latest ${shown.length} of ${events.length} alerts in this range.` }));
+}
+
+function drawHeatmap(rows, stats) {
+  const host = $("#heatmap");
+  host.replaceChildren();
+  if (!stats.length) {
+    host.append(el("div", { class: "empty", text: "No readings in this range. Try a longer one." }));
+    return;
+  }
+  // Average by city and local hour of day.
+  const cells = new Map();
+  for (const r of rows) {
+    const key = `${r.city}|${new Date(r.t).getHours()}`;
+    const cell = cells.get(key) || { sum: 0, n: 0 };
+    cell.sum += r.c; cell.n++;
+    cells.set(key, cell);
+  }
+  const values = [...cells.values()].map((c) => c.sum / c.n);
+  const spread = Math.max(1, ...values.map((v) => Math.abs(v - ALERT_LIMIT_C)));
+  // Diverging around the alert limit: grey at the limit, red above, blue below.
+  const shade = (v) => {
+    const t = Math.max(-1, Math.min(1, (v - ALERT_LIMIT_C) / spread));
+    return `color-mix(in oklab, ${t >= 0 ? "var(--div-hot)" : "var(--div-cold)"} ${Math.round(Math.abs(t) * 100)}%, var(--div-mid))`;
+  };
+  const hourLabel = (h) => String(h).padStart(2, "0");
+  const ordered = [...stats].sort((a, b) => b.avg - a.avg);
+
+  const grid = el("div", { class: "heat", role: "img",
+    "aria-label": "Heatmap of average temperature by city and hour of day. The same numbers are in the table under Show the numbers." });
+  for (const s of ordered) {
+    grid.append(el("div", { class: "heat-name", text: s.city, title: s.city }));
+    for (let h = 0; h < 24; h++) {
+      const cell = cells.get(`${s.city}|${h}`);
+      if (!cell) { grid.append(el("div", { class: "heat-cell none" })); continue; }
+      const avg = cell.sum / cell.n;
+      const node = el("div", { class: "heat-cell", style: `background:${shade(avg)}` });
+      const details = [{ color: colorOf(s.city), value: fmtTemp(avg), label: `average of ${cell.n} reading${cell.n === 1 ? "" : "s"}` }];
+      node.addEventListener("pointermove", (event) => showTip(event.clientX, event.clientY, `${s.city}, ${hourLabel(h)}:00 to ${hourLabel((h + 1) % 24)}:00`, details));
+      node.addEventListener("pointerleave", hideTip);
+      grid.append(node);
+    }
+  }
+  grid.append(el("div"));
+  for (let h = 0; h < 24; h++) grid.append(el("div", { class: `heat-hour${h % 6 ? " minor" : ""}`, text: h % 3 ? "" : hourLabel(h) }));
+  host.append(grid);
+
+  const lo = ALERT_LIMIT_C - spread, hi = ALERT_LIMIT_C + spread;
+  host.append(el("div", { class: "scale" },
+    el("span", { text: fmtTemp(lo) }),
+    el("span", { class: "scale-bar", style: "background:linear-gradient(90deg, var(--div-cold), var(--div-mid), var(--div-hot))" }),
+    el("span", { text: fmtTemp(hi) }),
+    el("span", { text: `· grey is the ${ALERT_LIMIT_C}°C alert limit · hours run 00 to 23` })));
+
+  // The same numbers as a table, so nothing depends on reading colour.
+  const head = el("tr", {}, el("th", { text: "Hour" }), ...ordered.map((s) => el("th", { class: "num", text: s.city })));
+  const body = [];
+  for (let h = 0; h < 24; h++) {
+    const cellsInRow = ordered.map((s) => {
+      const cell = cells.get(`${s.city}|${h}`);
+      return el("td", { class: "num", text: cell ? fmtTemp(cell.sum / cell.n) : "–" });
+    });
+    body.push(el("tr", {}, el("td", { text: `${hourLabel(h)}:00` }), ...cellsInRow));
+  }
+  host.append(el("details", {}, el("summary", { text: "Show the numbers" }),
+    el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, head), el("tbody", {}, ...body)))));
+}
+
+function drawRanges(stats) {
+  const host = $("#ranges");
+  host.replaceChildren();
+  if (!stats.length) {
+    host.append(el("div", { class: "empty", text: "No readings in this range. Try a longer one." }));
+    return;
+  }
+  const { ticks, showLimit } = tempTicks(Math.min(...stats.map((s) => s.min)), Math.max(...stats.map((s) => s.max)));
+  const lo = ticks[0], hi = ticks[ticks.length - 1];
+  const pct = (c) => `${((c - lo) / (hi - lo) * 100).toFixed(2)}%`;
+  const backdrop = () => {
+    const parts = ticks.map((tick) => el("span", { class: "rng-grid", style: `left:${pct(tick)}` }));
+    if (showLimit) parts.push(el("span", { class: "rng-limit", style: `left:${pct(ALERT_LIMIT_C)}` }));
+    return parts;
+  };
+
+  for (const s of [...stats].sort((a, b) => b.avg - a.avg)) {
+    const color = colorOf(s.city);
+    const row = el("div", { class: "rng-row", tabindex: "0",
+        "aria-label": `${s.city}: average ${fmtTemp(s.avg)}, low ${fmtTemp(s.min)}, high ${fmtTemp(s.max)}` },
+      el("div", { class: "rng-name", text: s.city, title: s.city }),
+      el("div", { class: "rng-track" }, ...backdrop(),
+        el("span", { class: "rng-span", style: `left:${pct(s.min)};width:calc(${pct(s.max)} - ${pct(s.min)});background:${color}` }),
+        el("span", { class: "rng-dot", style: `left:${pct(s.avg)};background:${color}` })),
+      el("div", { class: "rng-val", text: fmtTemp(s.avg) }));
+    const details = [
+      { color, value: fmtTemp(s.max), label: "High" },
+      { color, value: fmtTemp(s.avg), label: "Average" },
+      { color, value: fmtTemp(s.min), label: "Low" },
+    ];
+    row.addEventListener("pointermove", (event) => showTip(event.clientX, event.clientY, s.city, details));
+    row.addEventListener("pointerleave", hideTip);
+    row.addEventListener("focus", () => { const box = row.getBoundingClientRect(); showTip(box.left + box.width / 2, box.top - 30, s.city, details); });
+    row.addEventListener("blur", hideTip);
+    host.append(row);
+  }
+
+  const axis = el("div", { class: "rng-row rng-axis", "aria-hidden": "true" }, el("div"),
+    el("div", { class: "rng-track" },
+      ...ticks.filter((_, i) => ticks.length <= 8 || i % 2 === 0).map((tick) => el("span", { class: "rng-tick", style: `left:${pct(tick)}`, text: `${tick}°` }))),
+    el("div"));
+  host.append(axis);
+  if (showLimit) host.append(el("p", { class: "note", text: `The dashed line is the ${ALERT_LIMIT_C}°C alert limit.` }));
+}
+
+function drawTable(stats) {
+  const body = $("#table");
+  body.replaceChildren();
+  if (!stats.length) {
+    body.append(el("tr", {}, el("td", { colspan: "9", class: "empty", text: "No readings in this range." })));
+    return;
+  }
+  for (const s of [...stats].sort((a, b) => b.last.c - a.last.c)) {
+    const latest = el("td", { class: "num", text: fmtTemp(s.last.c) });
+    const cityCell = el("td", {}, el("span", { class: "dot", style: `background:${colorOf(s.city)}` }), el("span", { text: s.city }));
+    if (s.last.c > ALERT_LIMIT_C) cityCell.append(el("span", { class: "flag", text: "Above limit" }));
+    if (isStorm(s.last)) cityCell.append(el("span", { class: "flag storm", text: "Storm" }));
+    body.append(el("tr", {},
+      cityCell, latest,
+      el("td", { text: s.last.desc }),
+      el("td", { class: "num", text: s.last.wind != null ? `${s.last.wind.toFixed(1)} m/s` : "–" }),
+      el("td", { class: "num", text: fmtTemp(s.avg) }),
+      el("td", { class: "num", text: fmtTemp(s.min) }),
+      el("td", { class: "num", text: fmtTemp(s.max) }),
+      el("td", { class: "num", text: s.n.toLocaleString() }),
+      el("td", { text: fmtStamp.format(s.last.t) })));
+  }
+}
+
+/* ---------- start ---------- */
+{
+  // Point the raw-data link at the file on GitHub when this page is served from GitHub Pages.
+  const owner = /^([^.]+)\.github\.io$/i.exec(location.hostname);
+  const repo = location.pathname.split("/").filter(Boolean)[0];
+  if (owner && repo && !repo.includes(".")) $("#raw-link").href = `https://github.com/${owner[1]}/${repo}/blob/HEAD/data/weather_data.csv`;
+}
+new ResizeObserver(() => {
+  const width = $("#trend").clientWidth;
+  if (readings.length && width && width !== lastTrendWidth) drawTrend(statsByCity(inRange(readings, range)));
+}).observe($("#trend"));
+addEventListener("scroll", hideTip, { passive: true });
+load();
+setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>
